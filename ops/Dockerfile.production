@@ -1,0 +1,96 @@
+ARG PHP_VERSION=8.3
+FROM php:${PHP_VERSION}-apache
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        curl \
+        gettext \
+        libcurl4-openssl-dev \
+        libfreetype6-dev \
+        libicu-dev \
+        libjpeg-dev \
+        libonig-dev \
+        libpng-dev \
+        libxml2-dev \
+        libzip-dev \
+        locales \
+        unzip \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN printf '%s\n' \
+        'af_ZA.UTF-8 UTF-8' \
+        'ar_SA.UTF-8 UTF-8' \
+        'ca_ES.UTF-8 UTF-8' \
+        'de_DE.UTF-8 UTF-8' \
+        'el_GR.UTF-8 UTF-8' \
+        'en_GB.UTF-8 UTF-8' \
+        'en_US.UTF-8 UTF-8' \
+        'es_DO.UTF-8 UTF-8' \
+        'es_ES.UTF-8 UTF-8' \
+        'es_MX.UTF-8 UTF-8' \
+        'fr_FR.UTF-8 UTF-8' \
+        'he_IL.UTF-8 UTF-8' \
+        'hr_HR.UTF-8 UTF-8' \
+        'it_IT.UTF-8 UTF-8' \
+        'ja_JP.UTF-8 UTF-8' \
+        'lt_LT.UTF-8 UTF-8' \
+        'nl_NL.UTF-8 UTF-8' \
+        'pl_PL.UTF-8 UTF-8' \
+        'pt_BR.UTF-8 UTF-8' \
+        'pt_PT.UTF-8 UTF-8' \
+        'ro_RO.UTF-8 UTF-8' \
+        'sq_AL.UTF-8 UTF-8' \
+        'th_TH.UTF-8 UTF-8' \
+        'tr_TR.UTF-8 UTF-8' \
+        'uk_UA.UTF-8 UTF-8' \
+        'ur_PK.UTF-8 UTF-8' \
+        'vi_VN.UTF-8 UTF-8' \
+        'zh_CN.UTF-8 UTF-8' \
+        'zh_HK.UTF-8 UTF-8' \
+        > /etc/locale.gen \
+    && locale-gen
+
+RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
+    && docker-php-ext-install -j"$(nproc)" \
+        bcmath \
+        curl \
+        gd \
+        gettext \
+        intl \
+        mbstring \
+        mysqli \
+        pdo_mysql \
+        xml \
+        zip \
+    && a2enmod rewrite \
+    && sed -i 's/AllowOverride None/AllowOverride All/g' /etc/apache2/apache2.conf \
+    && printf '%s\n' 'ServerName localhost' > /etc/apache2/conf-available/server-name.conf \
+    && a2enconf server-name
+
+COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
+
+WORKDIR /var/www/html
+
+COPY composer.json composer.lock ./
+RUN composer install \
+        --no-dev \
+        --no-interaction \
+        --no-progress \
+        --optimize-autoloader \
+        --prefer-dist \
+        --no-scripts
+
+COPY . .
+COPY ops/php/gibbon.ini /usr/local/etc/php/conf.d/gibbon.ini
+
+RUN chown -R root:www-data /var/www/html \
+    && find /var/www/html -path /var/www/html/vendor -prune -o -type d -exec chmod 755 {} + \
+    && find /var/www/html -path /var/www/html/vendor -prune -o -type f -exec chmod 644 {} + \
+    && chown -R www-data:www-data /var/www/html/uploads \
+    && chmod 775 /var/www/html/uploads
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=5 \
+    CMD curl --fail --silent --show-error http://127.0.0.1/ > /dev/null || exit 1
+
+EXPOSE 80
+
+CMD ["apache2-foreground"]

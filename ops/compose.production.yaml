@@ -1,0 +1,41 @@
+name: gibbon
+
+services:
+    app:
+        image: gibbon-core:${GIBBON_IMAGE_TAG:-latest}
+        build:
+            context: ..
+            dockerfile: ops/Dockerfile.production
+            args:
+                PHP_VERSION: ${PHP_VERSION:-8.3}
+        depends_on:
+            db:
+                condition: service_healthy
+        ports:
+            - "${GIBBON_BIND_ADDRESS:-0.0.0.0}:${APP_PORT:-8080}:80"
+        volumes:
+            - ./runtime/config.php:/var/www/html/config.php
+            - gibbon_uploads:/var/www/html/uploads
+        restart: unless-stopped
+
+    db:
+        image: mysql:${MYSQL_VERSION:-8.0}
+        command: --default-authentication-plugin=mysql_native_password
+        environment:
+            MYSQL_DATABASE: ${MYSQL_DATABASE:-gibbon}
+            MYSQL_USER: ${MYSQL_USER:-gibbon}
+            MYSQL_PASSWORD: ${MYSQL_PASSWORD:?MYSQL_PASSWORD is required}
+            MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD is required}
+        volumes:
+            - gibbon_db_data:/var/lib/mysql
+        healthcheck:
+            test: ["CMD-SHELL", "mysqladmin ping --host=127.0.0.1 --user=root --password=$$MYSQL_ROOT_PASSWORD --silent"]
+            interval: 10s
+            timeout: 5s
+            retries: 10
+            start_period: 30s
+        restart: unless-stopped
+
+volumes:
+    gibbon_db_data:
+    gibbon_uploads:
