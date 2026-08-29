@@ -1,10 +1,14 @@
 # Never bake local credentials or environment config into the image
 config.php
 .env
+**/config.php
+**/.env
+ops/runtime/
 
 # Git history
 .git
 .gitignore
+**/.git
 
 # Local dev/test artifacts
 /uploads/*
